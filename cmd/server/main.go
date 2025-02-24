@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"manga-reader/internal/auth"
 	"net/http"
 	"os"
 	"os/signal"
@@ -47,17 +48,24 @@ func main() {
 		Cache:  redisCache,
 	}
 	var chapterRepo db.ChapterRepository
+	var userRepo *sqlite.SQLiteUserRepository
 	if sqliteRepo, ok := mangaRepo.(*sqlite.SQLiteMangaRepository); ok {
 		chapterRepo = sqlite.NewChapterRepository(sqliteRepo.GetDB(), log)
+		userRepo = sqlite.NewSQLiteUserRepository(sqliteRepo.GetDB(), log)
 	}
 	chapterHandler := &handlers.ChapterHandler{
 		Repo:   chapterRepo,
 		Logger: log,
 	}
+	userHandler := &handlers.UserHandler{
+		UserRepo: userRepo,
+		Logger:   log,
+	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", handlers.HealthHandler)
+	mux.Handle("/", auth.AuthMiddleware(http.HandlerFunc(handlers.HealthHandler)))
 
+	handlers.RegisterUserRoutes(mux, userHandler)
 	handlers.RegisterMangaRoutes(mux, mangaHandler, chapterHandler)
 	handlers.RegisterChapterRoutes(mux, chapterHandler)
 
