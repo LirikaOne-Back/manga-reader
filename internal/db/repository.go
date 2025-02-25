@@ -19,3 +19,11 @@ type ChapterRepository interface {
 	Update(ch *models.Chapter) error
 	Delete(id int64) error
 }
+
+type PageRepository interface {
+	Create(p *models.Page) (int64, error)
+	GetByID(id int64) (*models.Page, error)
+	ListByChapter(chapterID int64) ([]*models.Page, error)
+	Update(p *models.Page) error
+	Delete(id int64) error
+}

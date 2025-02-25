@@ -57,6 +57,14 @@ func main() {
 		Repo:   chapterRepo,
 		Logger: log,
 	}
+	var pageRepo db.PageRepository
+	if sqliteRepo, ok := mangaRepo.(*sqlite.SQLiteMangaRepository); ok {
+		pageRepo = sqlite.NewPageRepository(sqliteRepo.GetDB(), log)
+	}
+	pageHandler := &handlers.PageHandler{
+		Repo:   pageRepo,
+		Logger: log,
+	}
 	userHandler := &handlers.UserHandler{
 		UserRepo: userRepo,
 		Logger:   log,
@@ -68,6 +76,7 @@ func main() {
 	handlers.RegisterUserRoutes(mux, userHandler)
 	handlers.RegisterMangaRoutes(mux, mangaHandler, chapterHandler)
 	handlers.RegisterChapterRoutes(mux, chapterHandler)
+	handlers.RegisterPageRoutes(mux, pageHandler)
 
 	handler := middleware.RecoveryMiddleware(log, middleware.LoggingMiddleware(log, mux))
 
