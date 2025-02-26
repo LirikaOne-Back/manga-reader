@@ -90,7 +90,7 @@ func main() {
 
 	go func() {
 		log.Info("Запуск сервера на " + cfg.ServerAddress)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err = server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("Ошибка сервера", "err", err)
 		}
 	}()
