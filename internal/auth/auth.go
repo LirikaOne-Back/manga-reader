@@ -9,7 +9,11 @@ import (
 	"time"
 )
 
-var jwtSecret = []byte("secret")
+var JWTSecret []byte
+
+func SetJWTSecret(secret string) {
+	JWTSecret = []byte(secret)
+}
 
 func GenerateToken(userID int64) (string, error) {
 	claims := jwt.MapClaims{
@@ -17,7 +21,7 @@ func GenerateToken(userID int64) (string, error) {
 		"exp":     time.Now().Add(72 * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return token.SignedString(JWTSecret)
 }
 
 func ParseToken(tokenStr string) (int64, error) {
@@ -25,7 +29,7 @@ func ParseToken(tokenStr string) (int64, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
-		return jwtSecret, nil
+		return JWTSecret, nil
 	})
 	if err != nil {
 		return 0, err

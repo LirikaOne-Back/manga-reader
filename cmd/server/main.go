@@ -23,6 +23,8 @@ func main() {
 	cfg := config.LoadConfig()
 	log := logger.NewLogger()
 
+	auth.SetJWTSecret(cfg.JWTSecret)
+
 	var mangaRepo db.MangaRepository
 	var err error
 	switch cfg.DBType {

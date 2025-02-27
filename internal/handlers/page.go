@@ -150,13 +150,19 @@ func (h *PageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PageHandler) ListByChapter(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 4 {
-		http.Error(w, "Invalid URL", http.StatusBadRequest)
+	path := r.URL.Path
+
+	pathParts := strings.Split(strings.TrimPrefix(path, "/pages/chapter/"), "/")
+	if len(pathParts) == 0 || pathParts[0] == "" {
+		h.Logger.Error("Неверный формат URL", "path", path)
+		http.Error(w, "Invalid URL format", http.StatusBadRequest)
 		return
 	}
 
-	chapterId, err := strconv.ParseInt(parts[2], 10, 64)
+	chapterIDStr := pathParts[0]
+	h.Logger.Info("Извлечен ID главы", "chapterIDStr", chapterIDStr)
+
+	chapterId, err := strconv.ParseInt(chapterIDStr, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid chapter ID", http.StatusBadRequest)
 		return

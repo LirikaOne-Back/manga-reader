@@ -2,12 +2,11 @@ package handlers
 
 import (
 	"net/http"
-	"strings"
 )
 
 func RegisterPageRoutes(mux *http.ServeMux, ph *PageHandler) {
 	mux.HandleFunc("/page/upload", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
+		if r.Method == http.MethodPost {
 			ph.UploadImage(w, r)
 		} else {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -15,13 +14,15 @@ func RegisterPageRoutes(mux *http.ServeMux, ph *PageHandler) {
 	})
 
 	mux.HandleFunc("/pages/chapter/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && strings.HasSuffix(r.URL.Path, "/pages") {
+		if r.Method == http.MethodGet {
 			ph.ListByChapter(w, r)
+		} else {
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		}
 	})
 
 	mux.HandleFunc("/page/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
+		if r.Method == http.MethodDelete {
 			ph.Delete(w, r)
 		} else {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -29,7 +30,7 @@ func RegisterPageRoutes(mux *http.ServeMux, ph *PageHandler) {
 	})
 
 	mux.HandleFunc("/page/image/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
+		if r.Method == http.MethodGet {
 			ph.ServeImage(w, r)
 		} else {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)

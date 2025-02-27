@@ -76,7 +76,7 @@ func (r *SQLitePageRepository) ListByChapter(chapterID int64) ([]*models.Page, e
 }
 
 func (r *SQLitePageRepository) Update(p *models.Page) error {
-	res, err := r.db.Exec("UPDATE pages SET chupter_id = ?, number = ?, image_path = ? WHERE id = ?", p.ChapterID, p.Number, p.ImagePath, p.ID)
+	res, err := r.db.Exec("UPDATE pages SET chapter_id = ?, number = ?, image_path = ? WHERE id = ?", p.ChapterID, p.Number, p.ImagePath, p.ID)
 	if err != nil {
 		r.logger.Error("Ошибка обновления страницы", "err", err)
 		return err
@@ -95,7 +95,7 @@ func (r *SQLitePageRepository) Update(p *models.Page) error {
 }
 
 func (r *SQLitePageRepository) Delete(id int64) error {
-	res, err := r.db.Exec("DELETE pages  WHERE id = ?", id)
+	res, err := r.db.Exec("DELETE FROM pages  WHERE id = ?", id)
 	if err != nil {
 		r.logger.Error("Ошибка удаления страницы", "err", err)
 		return err
