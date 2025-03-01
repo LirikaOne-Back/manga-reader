@@ -174,7 +174,10 @@ func TestPageHandler_UploadImage(t *testing.T) {
 
 	resp := httptest.NewRecorder()
 
-	pageHandler.UploadImage(resp, req)
+	err := pageHandler.UploadImage(resp, req)
+	if err != nil {
+		t.Fatalf("UploadImage returned error: %v", err)
+	}
 
 	t.Logf("Тело ответа: %s", resp.Body.String())
 
@@ -182,13 +185,18 @@ func TestPageHandler_UploadImage(t *testing.T) {
 		t.Errorf("Ожидался статус %d, получен %d", http.StatusCreated, resp.Code)
 	}
 
-	if !json.Valid(resp.Body.Bytes()) {
-		t.Fatalf("Получен невалидный JSON: %s", resp.Body.String())
+	var successResp struct {
+		Success bool         `json:"success"`
+		Data    *models.Page `json:"data"`
 	}
 
-	page := models.Page{}
-	if err := json.Unmarshal(resp.Body.Bytes(), &page); err != nil {
+	if err := json.Unmarshal(resp.Body.Bytes(), &successResp); err != nil {
 		t.Fatalf("Ошибка декодирования ответа: %v", err)
+	}
+
+	page := successResp.Data
+	if page == nil {
+		t.Fatal("Нет данных в ответе")
 	}
 
 	if page.ID == 0 {

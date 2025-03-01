@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"manga-reader/internal/auth"
+	"manga-reader/internal/db/postgres"
 	"net/http"
 	"os"
 	"os/signal"
@@ -26,19 +27,38 @@ func main() {
 	auth.SetJWTSecret(cfg.JWTSecret)
 
 	var mangaRepo db.MangaRepository
+	var chapterRepo db.ChapterRepository
+	var pageRepo db.PageRepository
+	var userRepo db.UserRepository
+
 	var err error
 	switch cfg.DBType {
 	case "sqlite":
 		mangaRepo, err = sqlite.NewMangaRepository(cfg.DBSource, log)
+		if err != nil {
+			log.Error("Ошибка инициализации базы данных SQLite", "err", err)
+			return
+		}
+		if sqliteRepo, ok := mangaRepo.(*sqlite.SQLiteMangaRepository); ok {
+			chapterRepo = sqlite.NewChapterRepository(sqliteRepo.GetDB(), log)
+			pageRepo = sqlite.NewPageRepository(sqliteRepo.GetDB(), log)
+			userRepo = sqlite.NewSQLiteUserRepository(sqliteRepo.GetDB(), log)
+		}
 	case "postgres":
-		log.Error("Postgres пока не поддерживается")
-		return
+		connectionString := cfg.PostgresConnectionString()
+		mangaRepo, err = postgres.NewMangaRepository(connectionString, log)
+		if err != nil {
+			log.Error("Ошибка инициализации базы данных PostgreSQL", "err", err)
+			return
+		}
+
+		if pgRepo, ok := mangaRepo.(*postgres.PostgresMangaRepository); ok {
+			chapterRepo = postgres.NewChapterRepository(pgRepo.GetDB(), log)
+			pageRepo = postgres.NewPageRepository(pgRepo.GetDB(), log)
+			userRepo = postgres.NewUserRepository(pgRepo.GetDB(), log)
+		}
 	default:
-		log.Error("Неизвестный тип базы данных", "string", cfg.DBType)
-		return
-	}
-	if err != nil {
-		log.Error("Ошибка инициализации базы данных", "err", err)
+		log.Error("Неизвестный тип базы данных", "type", cfg.DBType)
 		return
 	}
 
@@ -49,20 +69,12 @@ func main() {
 		Logger: log,
 		Cache:  redisCache,
 	}
-	var chapterRepo db.ChapterRepository
-	var userRepo *sqlite.SQLiteUserRepository
-	if sqliteRepo, ok := mangaRepo.(*sqlite.SQLiteMangaRepository); ok {
-		chapterRepo = sqlite.NewChapterRepository(sqliteRepo.GetDB(), log)
-		userRepo = sqlite.NewSQLiteUserRepository(sqliteRepo.GetDB(), log)
-	}
+
 	chapterHandler := &handlers.ChapterHandler{
 		Repo:   chapterRepo,
 		Logger: log,
 	}
-	var pageRepo db.PageRepository
-	if sqliteRepo, ok := mangaRepo.(*sqlite.SQLiteMangaRepository); ok {
-		pageRepo = sqlite.NewPageRepository(sqliteRepo.GetDB(), log)
-	}
+
 	pageHandler := &handlers.PageHandler{
 		Repo:   pageRepo,
 		Logger: log,

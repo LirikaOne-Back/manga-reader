@@ -1,13 +1,18 @@
 package auth
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
 
 func TestGenerateAndParseToken(t *testing.T) {
+	SetJWTSecret("test-secret")
+
 	token, err := GenerateToken(42)
 	if err != nil {
 		t.Fatalf("Ошибка генерации токена: %v", err)
@@ -24,10 +29,19 @@ func TestGenerateAndParseToken(t *testing.T) {
 func TestAuthMiddleware(t *testing.T) {
 	SetJWTSecret("test-secret")
 
-	dummyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	testLogger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	originalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
-	handler := AuthMiddleware(dummyHandler)
+
+	handler := func(handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Store the logger in the request context
+			ctx := context.WithValue(r.Context(), "logger", testLogger)
+			AuthMiddleware(handler).ServeHTTP(w, r.WithContext(ctx))
+		})
+	}(originalHandler)
 
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()

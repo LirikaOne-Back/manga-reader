@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"manga-reader/internal/apperror"
 	"net/http"
+	"os"
 )
 
 type ErrorResponse struct {
@@ -36,6 +37,10 @@ func Success(w http.ResponseWriter, statusCode int, data interface{}) {
 }
 
 func Error(w http.ResponseWriter, logger *slog.Logger, err error) {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
+	}
+
 	var statusCode int
 	var errorResp interface{}
 

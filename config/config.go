@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"github.com/joho/godotenv"
 	"os"
 	"strconv"
@@ -11,6 +12,12 @@ type Config struct {
 	ServerAddress string
 	DBType        string
 	DBSource      string
+	PgHost        string
+	PgPort        int
+	PgUser        string
+	PgPassword    string
+	PgDBName      string
+	PgSSLMode     string
 	RedisAddr     string
 	RedisPassword string
 	RedisDB       int
@@ -24,11 +31,22 @@ func LoadConfig() Config {
 		ServerAddress: getEnv("SERVER_ADDRESS", ":8080"),
 		DBType:        getEnv("DB_TYPE", "sqlite"),
 		DBSource:      getEnv("DB_SOURCE", "manga.db"),
+		PgHost:        getEnv("PG_HOST", "localhost"),
+		PgPort:        getEnvAsInt("PG_PORT", 5432),
+		PgUser:        getEnv("PG_USER", "postgres"),
+		PgPassword:    getEnv("PG_PASSWORD", ""),
+		PgDBName:      getEnv("PG_DBNAME", "manga_reader"),
+		PgSSLMode:     getEnv("PG_SSLMODE", "disable"),
 		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 		RedisDB:       getEnvAsInt("REDIS_DB", 1),
 		JWTSecret:     getEnv("JWT_SECRET", "secret"),
 	}
+}
+
+func (c *Config) PostgresConnectionString() string {
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		c.PgHost, c.PgPort, c.PgUser, c.PgPassword, c.PgDBName, c.PgSSLMode)
 }
 
 func getEnv(key, defaultValue string) string {

@@ -7,14 +7,14 @@ import (
 	"log/slog"
 	"manga-reader/internal/apperror"
 	"manga-reader/internal/auth"
-	"manga-reader/internal/db/sqlite"
+	"manga-reader/internal/db"
 	"manga-reader/internal/response"
 	"manga-reader/models"
 	"net/http"
 )
 
 type UserHandler struct {
-	UserRepo *sqlite.SQLiteUserRepository
+	UserRepo db.UserRepository
 	Logger   *slog.Logger
 }
 

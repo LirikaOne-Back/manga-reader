@@ -20,10 +20,17 @@ type ChapterRepository interface {
 	Delete(id int64) error
 }
 
+// PageRepository описывает операции над страницами глав.
 type PageRepository interface {
 	Create(p *models.Page) (int64, error)
 	GetByID(id int64) (*models.Page, error)
 	ListByChapter(chapterID int64) ([]*models.Page, error)
 	Update(p *models.Page) error
 	Delete(id int64) error
+}
+
+// UserRepository описывает операции над пользователями.
+type UserRepository interface {
+	Create(user *models.User) (int64, error)
+	GetByUsername(username string) (*models.User, error)
 }
