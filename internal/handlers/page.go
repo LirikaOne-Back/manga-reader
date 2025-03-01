@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -25,20 +24,21 @@ func (h *PageHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 	idStr := strings.TrimPrefix(r.URL.Path, "/page/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		return apperror.NewBadRequestError("Некорректный ID главы", nil)
+		return apperror.NewBadRequestError("Некорректный ID страницы", err)
 	}
 
 	page, err := h.Repo.GetByID(id)
 	if err != nil {
-		return apperror.NewDatabaseError("Ошибка получения страницы", err)
+		return apperror.NewNotFoundError("Страница не найдена", err)
 	}
 
 	if err = h.Repo.Delete(id); err != nil {
-		return apperror.NewDatabaseError("Ошибка удаления страницы", err)
+		return apperror.NewDatabaseError("Ошибка удаления страницы из БД", err)
 	}
 
 	if err = os.Remove(page.ImagePath); err != nil {
-		return apperror.NewInternalServerError("Ошибка удаления файла страницы", err)
+		h.Logger.Error("Ошибка удаления файла изображения", "err", err)
+		// Не возвращаем ошибку, так как запись из БД уже удалена
 	}
 
 	response.Success(w, http.StatusNoContent, nil)
@@ -48,27 +48,32 @@ func (h *PageHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 func (h *PageHandler) UploadImage(w http.ResponseWriter, r *http.Request) error {
 	// Устанавливаем максимальный размер файла (10 МБ)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		return apperror.NewBadRequestError("Ошибка допустимого размера файла", err)
+		return apperror.NewBadRequestError("Ошибка при парсинге multipart формы", err)
 	}
 
+	// Получаем chapterID и number из формы
 	chapterIDStr := r.FormValue("chapter_id")
 	if chapterIDStr == "" {
-		return apperror.NewBadRequestError("Ошибка получения id главы", nil)
+		return apperror.NewValidationError("Поле chapter_id не может быть пустым",
+			map[string]string{"chapter_id": "Это поле обязательно"})
 	}
 
 	chapterID, err := strconv.ParseInt(chapterIDStr, 10, 64)
 	if err != nil {
-		return apperror.NewBadRequestError("Некорректный id главы", err)
+		return apperror.NewValidationError("Некорректный chapter_id",
+			map[string]string{"chapter_id": "Должно быть целое число"})
 	}
 
 	numberStr := r.FormValue("number")
 	if numberStr == "" {
-		return apperror.NewBadRequestError("Ошибка получения номера страницы", nil)
+		return apperror.NewValidationError("Поле number не может быть пустым",
+			map[string]string{"number": "Это поле обязательно"})
 	}
 
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
-		return apperror.NewBadRequestError("Некорректный номер страницы", err)
+		return apperror.NewValidationError("Некорректный номер страницы",
+			map[string]string{"number": "Должно быть целое число"})
 	}
 
 	file, handler, err := r.FormFile("image")
@@ -83,7 +88,7 @@ func (h *PageHandler) UploadImage(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	uploadDir := fmt.Sprintf("uploads/chapters/%d", chapterID)
-	if err = os.MkdirAll(uploadDir, 0755); err != nil {
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return apperror.NewInternalServerError("Ошибка создания директории", err)
 	}
 
@@ -108,49 +113,35 @@ func (h *PageHandler) UploadImage(w http.ResponseWriter, r *http.Request) error 
 
 	id, err := h.Repo.Create(page)
 	if err != nil {
+		// Если не удалось создать запись в БД, удаляем загруженный файл
 		os.Remove(filePath)
-		return apperror.NewValidationError("Ошибка сохранения страницы в БД", err)
+		return apperror.NewDatabaseError("Ошибка сохранения страницы в БД", err)
 	}
 
 	page.ID = id
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	jsonData, err := json.Marshal(page)
-	if err != nil {
-		return apperror.NewInternalServerError("Ошибка кодирования ответа", err)
-	}
-
-	if _, err = w.Write(jsonData); err != nil {
-		return apperror.NewInternalServerError("Ошибка записи ответа", err)
-	}
-	response.Success(w, http.StatusCreated, nil)
+	response.Success(w, http.StatusCreated, page)
 	return nil
 }
 
 func (h *PageHandler) ListByChapter(w http.ResponseWriter, r *http.Request) error {
-	path := r.URL.Path
-
-	pathParts := strings.Split(strings.TrimPrefix(path, "/pages/chapter/"), "/")
+	// Использование улучшенного метода извлечения ID главы
+	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/pages/chapter/"), "/")
 	if len(pathParts) == 0 || pathParts[0] == "" {
-		return apperror.NewBadRequestError("Неверный формат URL", nil)
+		return apperror.NewBadRequestError("Некорректный формат URL", nil)
 	}
 
 	chapterIDStr := pathParts[0]
-
-	chapterId, err := strconv.ParseInt(chapterIDStr, 10, 64)
+	chapterID, err := strconv.ParseInt(chapterIDStr, 10, 64)
 	if err != nil {
-		return apperror.NewBadRequestError("Ошибка получения ID главы", err)
+		return apperror.NewBadRequestError("Некорректный ID главы", err)
 	}
 
-	pages, err := h.Repo.ListByChapter(chapterId)
+	pages, err := h.Repo.ListByChapter(chapterID)
 	if err != nil {
-		return apperror.NewInternalServerError("Ошибка получения списка страниц", err)
+		return apperror.NewDatabaseError("Ошибка получения списка страниц", err)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	if err = json.NewEncoder(w).Encode(pages); err != nil {
-		return apperror.NewInternalServerError("Ошибка отправки страниц", err)
-	}
-	response.Success(w, http.StatusOK, nil)
+
+	response.Success(w, http.StatusOK, pages)
 	return nil
 }
 
@@ -158,17 +149,18 @@ func (h *PageHandler) ServeImage(w http.ResponseWriter, r *http.Request) error {
 	idStr := strings.TrimPrefix(r.URL.Path, "/page/image/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		return apperror.NewBadRequestError("Неверный формат id страницы", err)
+		return apperror.NewBadRequestError("Некорректный ID страницы", err)
 	}
 
 	page, err := h.Repo.GetByID(id)
 	if err != nil {
-		return apperror.NewNotFoundError("Ошибка получения страницы", err)
+		return apperror.NewNotFoundError("Страница не найдена", err)
 	}
+
 	contentType := "image/jpeg"
 	if strings.HasSuffix(page.ImagePath, ".png") {
 		contentType = "image/png"
-	} else if strings.HasSuffix(page.ImagePath, ".jpg") {
+	} else if strings.HasSuffix(page.ImagePath, ".jpg") || strings.HasSuffix(page.ImagePath, ".jpeg") {
 		contentType = "image/jpeg"
 	} else if strings.HasSuffix(page.ImagePath, ".webp") {
 		contentType = "image/webp"

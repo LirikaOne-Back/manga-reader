@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,8 +20,23 @@ func TestHealthHandler(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("Ожидался статус %d, получен %d", http.StatusOK, rr.Code)
 	}
-	expectedBody := "OK"
-	if rr.Body.String() != expectedBody {
-		t.Errorf("Ожидалось тело %q, получено %q", expectedBody, rr.Body.String())
+
+	var successResp struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Status string `json:"status"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(rr.Body.Bytes(), &successResp); err != nil {
+		t.Fatalf("Ошибка парсинга ответа: %v", err)
+	}
+
+	if !successResp.Success {
+		t.Error("Ожидалось поле success: true")
+	}
+
+	if successResp.Data.Status != "OK" {
+		t.Errorf("Ожидался статус %q, получен %q", "OK", successResp.Data.Status)
 	}
 }

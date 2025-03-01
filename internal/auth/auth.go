@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"github.com/golang-jwt/jwt/v4"
+	"manga-reader/internal/apperror"
+	"manga-reader/internal/response"
 	"net/http"
 	"strings"
 	"time"
@@ -47,17 +49,20 @@ func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			http.Error(w, "Authorization header missing", http.StatusUnauthorized)
+			err := apperror.NewUnauthorizedError("Отсутствует заголовок Authorization", nil)
+			response.Error(w, nil, err)
 			return
 		}
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+			err := apperror.NewUnauthorizedError("Неверный формат заголовка Authorization", nil)
+			response.Error(w, nil, err)
 			return
 		}
 		userID, err := ParseToken(parts[1])
 		if err != nil {
-			http.Error(w, "Invalid token: "+err.Error(), http.StatusUnauthorized)
+			err := apperror.NewUnauthorizedError("Неверный токен: "+err.Error(), err)
+			response.Error(w, nil, err)
 			return
 		}
 		ctx := context.WithValue(r.Context(), "user_id", userID)

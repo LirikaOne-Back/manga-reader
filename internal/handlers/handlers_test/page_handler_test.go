@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"manga-reader/internal/handlers"
+	"manga-reader/internal/handlers/handlers_test/helper"
 	"manga-reader/models"
 	"mime/multipart"
 	"net/http"
@@ -185,7 +186,7 @@ func TestPageHandler_UploadImage(t *testing.T) {
 		t.Fatalf("Получен невалидный JSON: %s", resp.Body.String())
 	}
 
-	var page models.Page
+	page := models.Page{}
 	if err := json.Unmarshal(resp.Body.Bytes(), &page); err != nil {
 		t.Fatalf("Ошибка декодирования ответа: %v", err)
 	}
@@ -232,11 +233,9 @@ func TestPageHandler_ListByChapter(t *testing.T) {
 		}
 	}
 
-	// Изменяем URL на новый формат в соответствии с нашими обновлениями
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/pages/chapter/%d", chapterID), nil)
 	resp := httptest.NewRecorder()
 
-	// Вызываем метод ListByChapter напрямую
 	err := pageHandler.ListByChapter(resp, req)
 	if err != nil {
 		t.Fatalf("Неожиданная ошибка при получении списка страниц: %v", err)
@@ -247,7 +246,7 @@ func TestPageHandler_ListByChapter(t *testing.T) {
 	}
 
 	var pages []*models.Page
-	if err := handlers.ExtractData(resp.Body, &pages); err != nil {
+	if err := helper.ExtractData(resp.Body, &pages); err != nil {
 		t.Fatalf("Ошибка декодирования ответа: %v", err)
 	}
 

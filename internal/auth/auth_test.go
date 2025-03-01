@@ -22,10 +22,13 @@ func TestGenerateAndParseToken(t *testing.T) {
 }
 
 func TestAuthMiddleware(t *testing.T) {
+	SetJWTSecret("test-secret")
+
 	dummyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
 	handler := AuthMiddleware(dummyHandler)
+
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)

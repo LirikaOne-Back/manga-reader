@@ -1,8 +1,10 @@
 package handlers
 
-import "net/http"
+import (
+	"manga-reader/internal/response"
+	"net/http"
+)
 
 func HealthHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("OK"))
+	response.Success(w, http.StatusOK, map[string]string{"status": "OK"})
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"manga-reader/internal/handlers"
+	"manga-reader/internal/handlers/handlers_test/helper"
 	"manga-reader/models"
 	"net/http"
 	"net/http/httptest"
@@ -115,7 +116,7 @@ func TestMangaHandler_CreateAndGet(t *testing.T) {
 	}
 
 	var created models.Manga
-	if err := handlers.ExtractData(createResp.Body, &created); err != nil {
+	if err := helper.ExtractData(createResp.Body, &created); err != nil {
 		t.Fatalf("Ошибка парсинга ответа: %v", err)
 	}
 	if created.ID == 0 {
@@ -137,7 +138,7 @@ func TestMangaHandler_CreateAndGet(t *testing.T) {
 	}
 
 	var fetched models.Manga
-	if err := handlers.ExtractData(getResp.Body, &fetched); err != nil {
+	if err := helper.ExtractData(getResp.Body, &fetched); err != nil {
 		t.Fatalf("Ошибка парсинга get-ответа: %v", err)
 	}
 	if fetched.ID != created.ID {
@@ -176,7 +177,7 @@ func TestMangaHandler_List(t *testing.T) {
 	}
 
 	var mangas []*models.Manga
-	if err := handlers.ExtractData(listResp.Body, &mangas); err != nil {
+	if err := helper.ExtractData(listResp.Body, &mangas); err != nil {
 		t.Fatalf("Ошибка парсинга списка: %v", err)
 	}
 	if len(mangas) != 3 {

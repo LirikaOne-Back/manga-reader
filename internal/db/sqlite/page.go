@@ -59,7 +59,7 @@ func (r *SQLitePageRepository) GetByID(id int64) (*models.Page, error) {
 func (r *SQLitePageRepository) ListByChapter(chapterID int64) ([]*models.Page, error) {
 	rows, err := r.db.Query("SELECT id, chapter_id, number, image_path FROM pages WHERE chapter_id = ?", chapterID)
 	if err != nil {
-		r.logger.Error("Ошибка получения списка стрпаниц", "err", err)
+		r.logger.Error("Ошибка получения списка страниц", "err", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -83,7 +83,7 @@ func (r *SQLitePageRepository) Update(p *models.Page) error {
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
-		r.logger.Error("Ошибка получения количенства измененных строк", "err", err)
+		r.logger.Error("Ошибка получения количества измененных строк", "err", err)
 		return err
 	}
 	if affected == 0 {
@@ -95,14 +95,14 @@ func (r *SQLitePageRepository) Update(p *models.Page) error {
 }
 
 func (r *SQLitePageRepository) Delete(id int64) error {
-	res, err := r.db.Exec("DELETE FROM pages  WHERE id = ?", id)
+	res, err := r.db.Exec("DELETE FROM pages WHERE id = ?", id)
 	if err != nil {
 		r.logger.Error("Ошибка удаления страницы", "err", err)
 		return err
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
-		r.logger.Error("Ошибка получения количенства удаленных строк", "err", err)
+		r.logger.Error("Ошибка получения количества удаленных строк", "err", err)
 		return err
 	}
 	if affected == 0 {

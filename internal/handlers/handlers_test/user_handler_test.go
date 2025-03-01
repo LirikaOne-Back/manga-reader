@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"manga-reader/internal/db/sqlite"
 	"manga-reader/internal/handlers"
+	"manga-reader/internal/handlers/handlers_test/helper"
 	"manga-reader/models"
 	"net/http"
 	"net/http/httptest"
@@ -49,7 +50,7 @@ func TestUserHandler_RegisterAndLogin(t *testing.T) {
 	}
 
 	var registeredUser models.User
-	if err := handlers.ExtractData(regResp.Body, &registeredUser); err != nil {
+	if err := helper.ExtractData(regResp.Body, &registeredUser); err != nil {
 		t.Fatalf("Ошибка парсинга ответа регистрации: %v", err)
 	}
 	if registeredUser.Username != "testuser" {
@@ -77,7 +78,7 @@ func TestUserHandler_RegisterAndLogin(t *testing.T) {
 	var loginResult struct {
 		Token string `json:"token"`
 	}
-	if err := handlers.ExtractData(loginResp.Body, &loginResult); err != nil {
+	if err := helper.ExtractData(loginResp.Body, &loginResult); err != nil {
 		t.Fatalf("Ошибка парсинга ответа логина: %v", err)
 	}
 	if loginResult.Token == "" {

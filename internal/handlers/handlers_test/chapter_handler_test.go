@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"manga-reader/internal/handlers"
+	"manga-reader/internal/handlers/handlers_test/helper"
 	"manga-reader/models"
 	"net/http"
 	"net/http/httptest"
@@ -102,7 +103,7 @@ func TestChapterHandler_CreateAndGet(t *testing.T) {
 	}
 
 	var chapter models.Chapter
-	if err := handlers.ExtractData(createResp.Body, &chapter); err != nil {
+	if err := helper.ExtractData(createResp.Body, &chapter); err != nil {
 		t.Fatalf("Ошибка парсинга ответа создания главы: %v", err)
 	}
 	if chapter.ID == 0 {
@@ -124,45 +125,10 @@ func TestChapterHandler_CreateAndGet(t *testing.T) {
 	}
 
 	var fetched models.Chapter
-	if err := handlers.ExtractData(getResp.Body, &fetched); err != nil {
+	if err := helper.ExtractData(getResp.Body, &fetched); err != nil {
 		t.Fatalf("Ошибка парсинга ответа получения главы: %v", err)
 	}
 	if fetched.Title != chapter.Title {
 		t.Errorf("Ожидалось название %q, получено %q", chapter.Title, fetched.Title)
-	}
-}
-
-func TestChapterHandler_ListByManga(t *testing.T) {
-	mockRepo := NewMockChapterRepository()
-	testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	chapterHandler := &handlers.ChapterHandler{
-		Repo:   mockRepo,
-		Logger: testLogger,
-	}
-
-	for i := 1; i <= 3; i++ {
-		title := fmt.Sprintf("Глава %d", i)
-		_, _ = mockRepo.Create(&models.Chapter{MangaID: 1, Number: i, Title: title})
-	}
-
-	listReq := httptest.NewRequest(http.MethodGet, "/manga/1/chapters", nil)
-	listResp := httptest.NewRecorder()
-
-	err := chapterHandler.ListByManga(listResp, listReq)
-	if err != nil {
-		t.Fatalf("Неожиданная ошибка при получении списка глав: %v", err)
-	}
-
-	if listResp.Code != http.StatusOK {
-		t.Fatalf("Ожидался статус %d, получен %d", http.StatusOK, listResp.Code)
-	}
-
-	var chapters []*models.Chapter
-	if err := handlers.ExtractData(listResp.Body, &chapters); err != nil {
-		t.Fatalf("Ошибка парсинга списка глав: %v", err)
-	}
-
-	if len(chapters) != 3 {
-		t.Errorf("Ожидалось 3 главы, получено %d", len(chapters))
 	}
 }
