@@ -1,20 +1,22 @@
 package handlers
 
-import "net/http"
+import (
+	"manga-reader/internal/apperror"
+	"manga-reader/internal/middleware"
+	"net/http"
+)
 
 func RegisterUserRoutes(mux *http.ServeMux, uh *UserHandler) {
-	mux.HandleFunc("/user/register", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/user/register", middleware.ErrorHandler(uh.Logger, func(w http.ResponseWriter, r *http.Request) error {
 		if r.Method != http.MethodPost {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
+			return apperror.NewBadRequestError("Метод не поддерживается", nil)
 		}
-		uh.Register(w, r)
-	})
-	mux.HandleFunc("/user/login", func(w http.ResponseWriter, r *http.Request) {
+		return uh.Register(w, r)
+	}))
+	mux.HandleFunc("/user/login", middleware.ErrorHandler(uh.Logger, func(w http.ResponseWriter, r *http.Request) error {
 		if r.Method != http.MethodPost {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
+			return apperror.NewBadRequestError("Метод не поддерживается", nil)
 		}
-		uh.Login(w, r)
-	})
+		return uh.Login(w, r)
+	}))
 }

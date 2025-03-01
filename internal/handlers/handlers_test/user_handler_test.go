@@ -3,7 +3,6 @@ package handlers_test
 import (
 	"bytes"
 	"database/sql"
-	"encoding/json"
 	_ "github.com/mattn/go-sqlite3"
 	"io"
 	"log/slog"
@@ -35,18 +34,22 @@ func TestUserHandler_RegisterAndLogin(t *testing.T) {
 	}
 
 	// Тест регистрации
-	regBody := `{"username": "testuser", "password": "secret"}`
-	regReq := httptest.NewRequest(http.MethodPost, "/users/register", bytes.NewBufferString(regBody))
+	regBody := `{"username": "testuser", "password": "secret123"}`
+	regReq := httptest.NewRequest(http.MethodPost, "/user/register", bytes.NewBufferString(regBody))
 	regReq.Header.Set("Content-Type", "application/json")
 	regResp := httptest.NewRecorder()
 
-	userHandler.Register(regResp, regReq)
+	err := userHandler.Register(regResp, regReq)
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка при регистрации: %v", err)
+	}
+
 	if regResp.Code != http.StatusCreated {
 		t.Fatalf("Ожидался статус %d, получен %d", http.StatusCreated, regResp.Code)
 	}
 
 	var registeredUser models.User
-	if err := json.Unmarshal(regResp.Body.Bytes(), &registeredUser); err != nil {
+	if err := handlers.ExtractData(regResp.Body, &registeredUser); err != nil {
 		t.Fatalf("Ошибка парсинга ответа регистрации: %v", err)
 	}
 	if registeredUser.Username != "testuser" {
@@ -57,23 +60,27 @@ func TestUserHandler_RegisterAndLogin(t *testing.T) {
 	}
 
 	// Тест логина
-	loginBody := `{"username": "testuser", "password": "secret"}`
-	loginReq := httptest.NewRequest(http.MethodPost, "/users/login", bytes.NewBufferString(loginBody))
+	loginBody := `{"username": "testuser", "password": "secret123"}`
+	loginReq := httptest.NewRequest(http.MethodPost, "/user/login", bytes.NewBufferString(loginBody))
 	loginReq.Header.Set("Content-Type", "application/json")
 	loginResp := httptest.NewRecorder()
 
-	userHandler.Login(loginResp, loginReq)
+	err = userHandler.Login(loginResp, loginReq)
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка при логине: %v", err)
+	}
+
 	if loginResp.Code != http.StatusOK {
 		t.Fatalf("Ожидался статус %d, получен %d", http.StatusOK, loginResp.Code)
 	}
+
 	var loginResult struct {
 		Token string `json:"token"`
 	}
-	if err := json.Unmarshal(loginResp.Body.Bytes(), &loginResult); err != nil {
+	if err := handlers.ExtractData(loginResp.Body, &loginResult); err != nil {
 		t.Fatalf("Ошибка парсинга ответа логина: %v", err)
 	}
 	if loginResult.Token == "" {
 		t.Error("Ожидался непустой токен")
 	}
-
 }

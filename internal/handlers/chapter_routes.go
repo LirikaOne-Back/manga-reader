@@ -1,25 +1,29 @@
 package handlers
 
-import "net/http"
+import (
+	"manga-reader/internal/apperror"
+	"manga-reader/internal/middleware"
+	"net/http"
+)
 
 func RegisterChapterRoutes(mux *http.ServeMux, ch *ChapterHandler) {
-	mux.HandleFunc("/chapter", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/chapter", middleware.ErrorHandler(ch.Logger, func(w http.ResponseWriter, r *http.Request) error {
 		if r.Method == http.MethodPost {
-			ch.Create(w, r)
+			return ch.Create(w, r)
 		} else {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return apperror.NewBadRequestError("Метод не поддерживается", nil)
 		}
-	})
-	mux.HandleFunc("/chapter/", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	mux.HandleFunc("/chapter/", middleware.ErrorHandler(ch.Logger, func(w http.ResponseWriter, r *http.Request) error {
 		switch r.Method {
 		case http.MethodGet:
-			ch.GetById(w, r)
+			return ch.GetById(w, r)
 		case http.MethodPut:
-			ch.Update(w, r)
+			return ch.Update(w, r)
 		case http.MethodDelete:
-			ch.Delete(w, r)
+			return ch.Delete(w, r)
 		default:
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return apperror.NewBadRequestError("Метод не поддерживается", nil)
 		}
-	})
+	}))
 }

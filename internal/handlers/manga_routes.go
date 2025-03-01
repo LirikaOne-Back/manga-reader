@@ -1,27 +1,28 @@
 package handlers
 
 import (
+	"manga-reader/internal/apperror"
+	"manga-reader/internal/middleware"
 	"net/http"
 	"strings"
 )
 
 func RegisterMangaRoutes(mux *http.ServeMux, mh *MangaHandler, ch *ChapterHandler) {
-	mux.HandleFunc("/manga", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/manga", middleware.ErrorHandler(mh.Logger, func(w http.ResponseWriter, r *http.Request) error {
 		switch r.Method {
 		case http.MethodGet:
-			mh.List(w, r)
+			return mh.List(w, r)
 		case http.MethodPost:
-			mh.Create(w, r)
+			return mh.Create(w, r)
 		default:
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return apperror.NewBadRequestError("Метод не поддерживается", nil)
 		}
-	})
+	}))
 
-	mux.HandleFunc("/manga/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/manga/", middleware.ErrorHandler(mh.Logger, func(w http.ResponseWriter, r *http.Request) error {
 		if strings.HasSuffix(r.URL.Path, "/chapters") {
-			ch.ListByManga(w, r)
-			return
+			return ch.ListByManga(w, r)
 		}
-		mh.Detail(w, r)
-	})
+		return mh.Detail(w, r)
+	}))
 }

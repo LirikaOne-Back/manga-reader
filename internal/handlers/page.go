@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"manga-reader/internal/apperror"
 	"manga-reader/internal/db"
+	"manga-reader/internal/response"
 	"manga-reader/models"
 	"net/http"
 	"os"
@@ -19,88 +21,70 @@ type PageHandler struct {
 	Logger *slog.Logger
 }
 
-func (h *PageHandler) Delete(w http.ResponseWriter, r *http.Request) {
+func (h *PageHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 	idStr := strings.TrimPrefix(r.URL.Path, "/page/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid page ID", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Некорректный ID главы", nil)
 	}
 
 	page, err := h.Repo.GetByID(id)
 	if err != nil {
-		h.Logger.Error("Ошибка получения страницы", "err", err)
-		http.Error(w, "Not Found", http.StatusNotFound)
-		return
+		return apperror.NewDatabaseError("Ошибка получения страницы", err)
 	}
 
 	if err = h.Repo.Delete(id); err != nil {
-		h.Logger.Error("Ошибка удаления страницы из БД", "err", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return apperror.NewDatabaseError("Ошибка удаления страницы", err)
 	}
 
 	if err = os.Remove(page.ImagePath); err != nil {
-		h.Logger.Error("Ошибка удаления файла изображения", "err", err)
+		return apperror.NewInternalServerError("Ошибка удаления файла страницы", err)
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	response.Success(w, http.StatusNoContent, nil)
+	return nil
 }
 
-func (h *PageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
+func (h *PageHandler) UploadImage(w http.ResponseWriter, r *http.Request) error {
 	// Устанавливаем максимальный размер файла (10 МБ)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		h.Logger.Error("Ошибка при парсинге multipart формы", "err", err)
-		http.Error(w, "Ошибка чтения формы", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Ошибка допустимого размера файла", err)
 	}
 
-	// Получаем chapterID и number из формы
 	chapterIDStr := r.FormValue("chapter_id")
 	if chapterIDStr == "" {
-		http.Error(w, "Не указан chapter_id", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Ошибка получения id главы", nil)
 	}
 
 	chapterID, err := strconv.ParseInt(chapterIDStr, 10, 64)
 	if err != nil {
-		h.Logger.Error("Некорректный chapter_id", "err", err)
-		http.Error(w, "Некорректный chapter_id", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Некорректный id главы", err)
 	}
 
 	numberStr := r.FormValue("number")
 	if numberStr == "" {
-		http.Error(w, "Не указан номер страницы", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Ошибка получения номера страницы", nil)
 	}
 
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
-		h.Logger.Error("Некорректный номер страницы", "err", err)
-		http.Error(w, "Некорректный номер страницы", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Некорректный номер страницы", err)
 	}
 
 	file, handler, err := r.FormFile("image")
 	if err != nil {
-		h.Logger.Error("Ошибка получения файла", "err", err)
-		http.Error(w, "Не удалось загрузить файл", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Не удалось загрузить файл", err)
 	}
 	defer file.Close()
 
 	contentType := handler.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "image/") {
-		http.Error(w, "Файл должен быть изображением", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Файл должен быть изображением", nil)
 	}
 
 	uploadDir := fmt.Sprintf("uploads/chapters/%d", chapterID)
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
-		h.Logger.Error("Ошибка создания директории", "err", err, "dir", uploadDir)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+	if err = os.MkdirAll(uploadDir, 0755); err != nil {
+		return apperror.NewInternalServerError("Ошибка создания директории", err)
 	}
 
 	filename := fmt.Sprintf("%d_%d%s", chapterID, number, filepath.Ext(handler.Filename))
@@ -108,16 +92,12 @@ func (h *PageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 
 	dst, err := os.Create(filePath)
 	if err != nil {
-		h.Logger.Error("Ошибка создания файла", "err", err, "path", filePath)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return apperror.NewInternalServerError("Ошибка создания файла", err)
 	}
 	defer dst.Close()
 
 	if _, err = io.Copy(dst, file); err != nil {
-		h.Logger.Error("Ошибка копирования файла", "err", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return apperror.NewInternalServerError("Ошибка копирования файла", err)
 	}
 
 	page := &models.Page{
@@ -128,10 +108,8 @@ func (h *PageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 
 	id, err := h.Repo.Create(page)
 	if err != nil {
-		h.Logger.Error("Ошибка сохранения страницы в БД", "err", err)
 		os.Remove(filePath)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return apperror.NewValidationError("Ошибка сохранения страницы в БД", err)
 	}
 
 	page.ID = id
@@ -139,61 +117,53 @@ func (h *PageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	jsonData, err := json.Marshal(page)
 	if err != nil {
-		h.Logger.Error("Ошибка кодирования ответа", "err", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return apperror.NewInternalServerError("Ошибка кодирования ответа", err)
 	}
 
 	if _, err = w.Write(jsonData); err != nil {
-		h.Logger.Error("Ошибка записи ответа", "err", err)
+		return apperror.NewInternalServerError("Ошибка записи ответа", err)
 	}
+	response.Success(w, http.StatusCreated, nil)
+	return nil
 }
 
-func (h *PageHandler) ListByChapter(w http.ResponseWriter, r *http.Request) {
+func (h *PageHandler) ListByChapter(w http.ResponseWriter, r *http.Request) error {
 	path := r.URL.Path
 
 	pathParts := strings.Split(strings.TrimPrefix(path, "/pages/chapter/"), "/")
 	if len(pathParts) == 0 || pathParts[0] == "" {
-		h.Logger.Error("Неверный формат URL", "path", path)
-		http.Error(w, "Invalid URL format", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Неверный формат URL", nil)
 	}
 
 	chapterIDStr := pathParts[0]
-	h.Logger.Info("Извлечен ID главы", "chapterIDStr", chapterIDStr)
 
 	chapterId, err := strconv.ParseInt(chapterIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid chapter ID", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Ошибка получения ID главы", err)
 	}
 
 	pages, err := h.Repo.ListByChapter(chapterId)
 	if err != nil {
-		h.Logger.Error("Ошибка получения списка страниц", "err", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return apperror.NewInternalServerError("Ошибка получения списка страниц", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(pages); err != nil {
-		h.Logger.Error("Ошибка отправки страниц", "err", err)
-		return
+		return apperror.NewInternalServerError("Ошибка отправки страниц", err)
 	}
+	response.Success(w, http.StatusOK, nil)
+	return nil
 }
 
-func (h *PageHandler) ServeImage(w http.ResponseWriter, r *http.Request) {
+func (h *PageHandler) ServeImage(w http.ResponseWriter, r *http.Request) error {
 	idStr := strings.TrimPrefix(r.URL.Path, "/page/image/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid page ID", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Неверный формат id страницы", err)
 	}
 
 	page, err := h.Repo.GetByID(id)
 	if err != nil {
-		h.Logger.Error("Ошибка получения страницы", "err", err)
-		http.Error(w, "Not Found", http.StatusNotFound)
-		return
+		return apperror.NewNotFoundError("Ошибка получения страницы", err)
 	}
 	contentType := "image/jpeg"
 	if strings.HasSuffix(page.ImagePath, ".png") {
@@ -206,4 +176,5 @@ func (h *PageHandler) ServeImage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", contentType)
 	http.ServeFile(w, r, page.ImagePath)
+	return nil
 }

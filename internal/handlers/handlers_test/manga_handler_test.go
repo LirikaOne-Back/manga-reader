@@ -3,7 +3,6 @@ package handlers_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -82,7 +81,7 @@ func (m *MockMangaRepository) Delete(id int64) error {
 type DummyRedisCache struct{}
 
 func (d *DummyRedisCache) Get(ctx context.Context, key string) (string, error) {
-	return "", nil
+	return "", errors.New("not found in cache")
 }
 
 func (d *DummyRedisCache) Set(ctx context.Context, key, value string, expiration time.Duration) error {
@@ -106,14 +105,17 @@ func TestMangaHandler_CreateAndGet(t *testing.T) {
 	createReq.Header.Set("Content-Type", "application/json")
 	createResp := httptest.NewRecorder()
 
-	mangaHandler.Create(createResp, createReq)
+	err := mangaHandler.Create(createResp, createReq)
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка при создании манги: %v", err)
+	}
 
 	if createResp.Code != http.StatusCreated {
 		t.Fatalf("Ожидался статус %d, получен %d", http.StatusCreated, createResp.Code)
 	}
 
 	var created models.Manga
-	if err := json.Unmarshal(createResp.Body.Bytes(), &created); err != nil {
+	if err := handlers.ExtractData(createResp.Body, &created); err != nil {
 		t.Fatalf("Ошибка парсинга ответа: %v", err)
 	}
 	if created.ID == 0 {
@@ -125,16 +127,23 @@ func TestMangaHandler_CreateAndGet(t *testing.T) {
 	getReq := httptest.NewRequest(http.MethodGet, getURL, nil)
 	getResp := httptest.NewRecorder()
 
-	mangaHandler.Detail(getResp, getReq)
+	err = mangaHandler.Detail(getResp, getReq)
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка при получении манги: %v", err)
+	}
+
 	if getResp.Code != http.StatusOK {
 		t.Fatalf("Ожидался статус %d, получен %d", http.StatusOK, getResp.Code)
 	}
 
 	var fetched models.Manga
-	if err := json.Unmarshal(getResp.Body.Bytes(), &fetched); err != nil {
+	if err := handlers.ExtractData(getResp.Body, &fetched); err != nil {
 		t.Fatalf("Ошибка парсинга get-ответа: %v", err)
 	}
-	if fetched.ID == 0 {
+	if fetched.ID != created.ID {
+		t.Errorf("Ожидался ID %d, получен %d", created.ID, fetched.ID)
+	}
+	if fetched.Title != created.Title {
 		t.Errorf("Ожидался заголовок %q, получен %q", created.Title, fetched.Title)
 	}
 }
@@ -156,12 +165,18 @@ func TestMangaHandler_List(t *testing.T) {
 
 	listReq := httptest.NewRequest(http.MethodGet, "/manga", nil)
 	listResp := httptest.NewRecorder()
-	mangaHandler.List(listResp, listReq)
+
+	err := mangaHandler.List(listResp, listReq)
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка при получении списка манги: %v", err)
+	}
+
 	if listResp.Code != http.StatusOK {
 		t.Fatalf("Ожидался статус %d, получен %d", http.StatusOK, listResp.Code)
 	}
+
 	var mangas []*models.Manga
-	if err := json.Unmarshal(listResp.Body.Bytes(), &mangas); err != nil {
+	if err := handlers.ExtractData(listResp.Body, &mangas); err != nil {
 		t.Fatalf("Ошибка парсинга списка: %v", err)
 	}
 	if len(mangas) != 3 {

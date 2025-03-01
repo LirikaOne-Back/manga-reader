@@ -117,7 +117,6 @@ func createMultipartRequest(t *testing.T, imagePath, url string, fields map[stri
 		}
 	}
 
-	// Открываем файл
 	file, err := os.Open(imagePath)
 	if err != nil {
 		t.Fatalf("Не удалось открыть тестовое изображение: %v", err)
@@ -212,7 +211,7 @@ func TestPageHandler_UploadImage(t *testing.T) {
 	}
 }
 
-func TestPageHandler_DListByChapter(t *testing.T) {
+func TestPageHandler_ListByChapter(t *testing.T) {
 	mockRepo := NewMockPageRepository()
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	pageHandler := &handlers.PageHandler{
@@ -233,16 +232,22 @@ func TestPageHandler_DListByChapter(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/chapter/%d/pages", chapterID), nil)
+	// Изменяем URL на новый формат в соответствии с нашими обновлениями
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/pages/chapter/%d", chapterID), nil)
 	resp := httptest.NewRecorder()
 
-	pageHandler.ListByChapter(resp, req)
+	// Вызываем метод ListByChapter напрямую
+	err := pageHandler.ListByChapter(resp, req)
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка при получении списка страниц: %v", err)
+	}
+
 	if resp.Code != http.StatusOK {
 		t.Errorf("Ожидался статус %d, получен %d", http.StatusOK, resp.Code)
 	}
 
 	var pages []*models.Page
-	if err := json.Unmarshal(resp.Body.Bytes(), &pages); err != nil {
+	if err := handlers.ExtractData(resp.Body, &pages); err != nil {
 		t.Fatalf("Ошибка декодирования ответа: %v", err)
 	}
 

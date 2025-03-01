@@ -1,7 +1,6 @@
-package handlers
+package handlers_test
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -93,13 +92,17 @@ func TestChapterHandler_CreateAndGet(t *testing.T) {
 	createReq.Header.Set("Content-Type", "application/json")
 	createResp := httptest.NewRecorder()
 
-	chapterHandler.Create(createResp, createReq)
+	err := chapterHandler.Create(createResp, createReq)
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка при создании главы: %v", err)
+	}
+
 	if createResp.Code != http.StatusCreated {
 		t.Fatalf("Ожидался статус %d, получен %d", http.StatusCreated, createResp.Code)
 	}
 
 	var chapter models.Chapter
-	if err := json.Unmarshal(createResp.Body.Bytes(), &chapter); err != nil {
+	if err := handlers.ExtractData(createResp.Body, &chapter); err != nil {
 		t.Fatalf("Ошибка парсинга ответа создания главы: %v", err)
 	}
 	if chapter.ID == 0 {
@@ -110,12 +113,18 @@ func TestChapterHandler_CreateAndGet(t *testing.T) {
 	getURL := fmt.Sprintf("/chapter/%d", chapter.ID)
 	getReq := httptest.NewRequest(http.MethodGet, getURL, nil)
 	getResp := httptest.NewRecorder()
-	chapterHandler.GetById(getResp, getReq)
-	if getResp.Code != http.StatusOK {
-		t.Fatalf("Ожидался статус %d, получен %d", http.StatusCreated, getResp.Code)
+
+	err = chapterHandler.GetById(getResp, getReq)
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка при получении главы: %v", err)
 	}
+
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("Ожидался статус %d, получен %d", http.StatusOK, getResp.Code)
+	}
+
 	var fetched models.Chapter
-	if err := json.Unmarshal(getResp.Body.Bytes(), &fetched); err != nil {
+	if err := handlers.ExtractData(getResp.Body, &fetched); err != nil {
 		t.Fatalf("Ошибка парсинга ответа получения главы: %v", err)
 	}
 	if fetched.Title != chapter.Title {
@@ -138,14 +147,21 @@ func TestChapterHandler_ListByManga(t *testing.T) {
 
 	listReq := httptest.NewRequest(http.MethodGet, "/manga/1/chapters", nil)
 	listResp := httptest.NewRecorder()
-	chapterHandler.ListByManga(listResp, listReq)
+
+	err := chapterHandler.ListByManga(listResp, listReq)
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка при получении списка глав: %v", err)
+	}
+
 	if listResp.Code != http.StatusOK {
 		t.Fatalf("Ожидался статус %d, получен %d", http.StatusOK, listResp.Code)
 	}
-	var chapters []models.Chapter
-	if err := json.Unmarshal(listResp.Body.Bytes(), &chapters); err != nil {
+
+	var chapters []*models.Chapter
+	if err := handlers.ExtractData(listResp.Body, &chapters); err != nil {
 		t.Fatalf("Ошибка парсинга списка глав: %v", err)
 	}
+
 	if len(chapters) != 3 {
 		t.Errorf("Ожидалось 3 главы, получено %d", len(chapters))
 	}

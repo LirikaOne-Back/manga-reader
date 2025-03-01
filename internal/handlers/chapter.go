@@ -3,8 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"log/slog"
+	"manga-reader/internal/apperror"
 	"manga-reader/internal/cache"
 	"manga-reader/internal/db"
+	"manga-reader/internal/response"
 	"manga-reader/models"
 	"net/http"
 	"strconv"
@@ -17,108 +19,99 @@ type ChapterHandler struct {
 	Cache  *cache.RedisCache
 }
 
-func (h *ChapterHandler) Delete(w http.ResponseWriter, r *http.Request) {
+func (h *ChapterHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 	idStr := strings.TrimPrefix(r.URL.Path, "/chapter/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid chapter ID", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Некорректный ID главы", err)
 	}
+
 	if err = h.Repo.Delete(id); err != nil {
-		h.Logger.Error("Ошибка удаления манги", "err", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return apperror.NewDatabaseError("Ошибка удаления главы", err)
 	}
-	w.WriteHeader(http.StatusNoContent)
+
+	response.Success(w, http.StatusNoContent, nil)
+	return nil
 }
 
-func (h *ChapterHandler) Create(w http.ResponseWriter, r *http.Request) {
+func (h *ChapterHandler) Create(w http.ResponseWriter, r *http.Request) error {
 	var ch models.Chapter
 	if err := json.NewDecoder(r.Body).Decode(&ch); err != nil {
-		h.Logger.Error("Ошибка декодирования запроса", "err", err)
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Ошибка декодирования запроса", err)
 	}
+
+	if ch.Title == "" {
+		return apperror.NewValidationError("Поле title не может быть пустым",
+			map[string]string{"title": "Это поле обязательно"})
+	}
+	if ch.MangaID <= 0 {
+		return apperror.NewValidationError("Некорректный ID манги",
+			map[string]string{"manga_id": "Должен быть положительным числом"})
+	}
+
 	id, err := h.Repo.Create(&ch)
 	if err != nil {
-		h.Logger.Error("Ошибка создания главы", "err", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return apperror.NewDatabaseError("Ошибка создания главы", err)
 	}
+
 	ch.ID = id
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	if err = json.NewEncoder(w).Encode(ch); err != nil {
-		h.Logger.Error("Ошибка кодирования ответа", "err", err)
-	}
+	response.Success(w, http.StatusCreated, ch)
+	return nil
 }
 
-func (h *ChapterHandler) Update(w http.ResponseWriter, r *http.Request) {
+func (h *ChapterHandler) Update(w http.ResponseWriter, r *http.Request) error {
 	idStr := strings.TrimPrefix(r.URL.Path, "/chapter/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid chapter ID", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Некорректный ID главы", err)
 	}
+
 	var ch models.Chapter
 	if err = json.NewDecoder(r.Body).Decode(&ch); err != nil {
-		h.Logger.Error("Ошибка декодирования запроса", "err", err)
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Ошибка декодирования запроса", err)
 	}
+
 	ch.ID = id
 	if err = h.Repo.Update(&ch); err != nil {
-		h.Logger.Error("Ошибка обновления главы", "err", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return apperror.NewDatabaseError("Ошибка обновления главы", err)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNoContent)
+
+	response.Success(w, http.StatusNoContent, nil)
+	return nil
 }
 
-func (h *ChapterHandler) GetById(w http.ResponseWriter, r *http.Request) {
+func (h *ChapterHandler) GetById(w http.ResponseWriter, r *http.Request) error {
 	idStr := strings.TrimPrefix(r.URL.Path, "/chapter/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid chapter ID", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Некорректный ID главы", err)
 	}
+
 	ch, err := h.Repo.GetByID(id)
 	if err != nil {
-		h.Logger.Error("Ошибка получения главы", "err", err)
-		http.Error(w, "Not Found", http.StatusNotFound)
-		return
+		return apperror.NewNotFoundError("Глава не найдена", err)
 	}
-	jsonData, err := json.Marshal(ch)
-	if err != nil {
-		h.Logger.Error("Ошибка маршелинга JSON", "err", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if _, err = w.Write(jsonData); err != nil {
-		h.Logger.Error("Ошибка отпривки ответа", "err", err)
-	}
+
+	response.Success(w, http.StatusOK, ch)
+	return nil
 }
 
-func (h *ChapterHandler) ListByManga(w http.ResponseWriter, r *http.Request) {
+func (h *ChapterHandler) ListByManga(w http.ResponseWriter, r *http.Request) error {
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 3 {
-		http.Error(w, "Invalid URL", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Некорректный URL", nil)
 	}
+
 	mangaID, err := strconv.ParseInt(parts[2], 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid manga ID", http.StatusBadRequest)
-		return
+		return apperror.NewBadRequestError("Некорректный ID манги", err)
 	}
+
 	chapters, err := h.Repo.ListByManga(mangaID)
 	if err != nil {
-		h.Logger.Error("Ошибка получения списка глав", "err", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return apperror.NewDatabaseError("Ошибка получения списка глав", err)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	if err = json.NewEncoder(w).Encode(chapters); err != nil {
-		h.Logger.Error("Ошибка отправки глав", "err", err)
-	}
+
+	response.Success(w, http.StatusOK, chapters)
+	return nil
 }
