@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"manga-reader/internal/analytics"
 	"manga-reader/internal/auth"
 	"manga-reader/internal/db/postgres"
 	"net/http"
@@ -64,24 +65,38 @@ func main() {
 
 	redisCache := cache.NewRedisCache(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB, log)
 
+	analyticsService := analytics.NewAnalyticsService(redisCache, log)
+
 	mangaHandler := &handlers.MangaHandler{
-		Repo:   mangaRepo,
-		Logger: log,
-		Cache:  redisCache,
+		Repo:      mangaRepo,
+		Logger:    log,
+		Cache:     redisCache,
+		Analytics: analyticsService,
 	}
 
 	chapterHandler := &handlers.ChapterHandler{
-		Repo:   chapterRepo,
-		Logger: log,
+		Repo:      chapterRepo,
+		Logger:    log,
+		Cache:     redisCache,
+		Analytics: analyticsService,
 	}
 
 	pageHandler := &handlers.PageHandler{
-		Repo:   pageRepo,
-		Logger: log,
+		Repo:      pageRepo,
+		Logger:    log,
+		Cache:     redisCache,
+		Analytics: analyticsService,
 	}
+
 	userHandler := &handlers.UserHandler{
 		UserRepo: userRepo,
 		Logger:   log,
+	}
+
+	analyticsHandler := &handlers.AnalyticsHandler{
+		MangaRepo: mangaRepo,
+		Analytics: analyticsService,
+		Logger:    log,
 	}
 
 	mux := http.NewServeMux()
@@ -91,6 +106,7 @@ func main() {
 	handlers.RegisterMangaRoutes(mux, mangaHandler, chapterHandler)
 	handlers.RegisterChapterRoutes(mux, chapterHandler)
 	handlers.RegisterPageRoutes(mux, pageHandler)
+	handlers.RegisterAnalyticsRoutes(mux, analyticsHandler)
 
 	handler := middleware.RecoveryMiddleware(log, middleware.LoggingMiddleware(log, mux))
 
@@ -100,6 +116,16 @@ func main() {
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  15 * time.Second,
+	}
+	ctx := context.Background()
+	if err = analyticsService.InitializeDailyStats(ctx); err != nil {
+		log.Error("Ошибка инициализации дневной статистики", "err", err)
+	}
+	if err = analyticsService.InitializeWeeklyStats(ctx); err != nil {
+		log.Error("Ошибка инициализации недельной статистики", "err", err)
+	}
+	if err = analyticsService.InitializeMonthlyStats(ctx); err != nil {
+		log.Error("Ошибка инициализации месячной статистики", "err", err)
 	}
 
 	go func() {

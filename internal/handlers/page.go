@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"manga-reader/internal/analytics"
 	"manga-reader/internal/apperror"
+	"manga-reader/internal/cache"
 	"manga-reader/internal/db"
 	"manga-reader/internal/response"
 	"manga-reader/models"
@@ -13,11 +16,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type PageHandler struct {
-	Repo   db.PageRepository
-	Logger *slog.Logger
+	Repo      db.PageRepository
+	Logger    *slog.Logger
+	Cache     cache.Cache
+	Analytics *analytics.AnalyticsService
 }
 
 func (h *PageHandler) Delete(w http.ResponseWriter, r *http.Request) error {
@@ -39,6 +45,13 @@ func (h *PageHandler) Delete(w http.ResponseWriter, r *http.Request) error {
 	if err = os.Remove(page.ImagePath); err != nil {
 		h.Logger.Error("Ошибка удаления файла изображения", "err", err)
 		// Не возвращаем ошибку, так как запись из БД уже удалена
+	}
+
+	if h.Cache != nil {
+		cacheKey := fmt.Sprintf("chapter:%d:pages", page.ChapterID)
+		if err = h.Cache.Delete(r.Context(), cacheKey); err != nil {
+			h.Logger.Error("Ошибка инвалидации кеша списка страниц", "key", cacheKey, "err", err)
+		}
 	}
 
 	response.Success(w, http.StatusNoContent, nil)
@@ -119,12 +132,19 @@ func (h *PageHandler) UploadImage(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	page.ID = id
+
+	if h.Cache != nil {
+		cacheKey := fmt.Sprintf("chapter:%d:pages", page.ChapterID)
+		if err := h.Cache.Delete(r.Context(), cacheKey); err != nil {
+			h.Logger.Error("Ошибка инвалидации кеша списка страниц", "key", cacheKey, "err", err)
+		}
+	}
+
 	response.Success(w, http.StatusCreated, page)
 	return nil
 }
 
 func (h *PageHandler) ListByChapter(w http.ResponseWriter, r *http.Request) error {
-	// Использование улучшенного метода извлечения ID главы
 	pathParts := strings.Split(strings.TrimPrefix(r.URL.Path, "/pages/chapter/"), "/")
 	if len(pathParts) == 0 || pathParts[0] == "" {
 		return apperror.NewBadRequestError("Некорректный формат URL", nil)
@@ -136,9 +156,34 @@ func (h *PageHandler) ListByChapter(w http.ResponseWriter, r *http.Request) erro
 		return apperror.NewBadRequestError("Некорректный ID главы", err)
 	}
 
+	cacheKey := fmt.Sprintf("chapter:%d:pages", chapterID)
+	if h.Cache != nil {
+		cachedData, err := h.Cache.Get(r.Context(), cacheKey)
+		if err == nil && cachedData != "" {
+			h.Logger.Info("Cache hit for pages list", "chapter_id", chapterID)
+
+			var pages []*models.Page
+			if err := json.Unmarshal([]byte(cachedData), &pages); err != nil {
+				h.Logger.Error("Ошибка десериализации списка страниц из кеша", "err", err)
+			} else {
+				response.Success(w, http.StatusOK, pages)
+				return nil
+			}
+		}
+	}
+
 	pages, err := h.Repo.ListByChapter(chapterID)
 	if err != nil {
 		return apperror.NewDatabaseError("Ошибка получения списка страниц", err)
+	}
+
+	if h.Cache != nil {
+		jsonData, err := json.Marshal(pages)
+		if err == nil {
+			if err := h.Cache.Set(r.Context(), cacheKey, string(jsonData), 30*time.Minute); err != nil {
+				h.Logger.Error("Ошибка кеширования списка страниц", "err", err)
+			}
+		}
 	}
 
 	response.Success(w, http.StatusOK, pages)
@@ -155,6 +200,30 @@ func (h *PageHandler) ServeImage(w http.ResponseWriter, r *http.Request) error {
 	page, err := h.Repo.GetByID(id)
 	if err != nil {
 		return apperror.NewNotFoundError("Страница не найдена", err)
+	}
+
+	if h.Analytics != nil {
+		var mangaID int64 = 0
+		chapterCacheKey := fmt.Sprintf("chapter:%d", page.ChapterID)
+
+		if h.Cache != nil {
+			chapterData, err := h.Cache.Get(r.Context(), chapterCacheKey)
+			if err == nil && chapterData != "" {
+				var chapter models.Chapter
+
+				if err := json.Unmarshal([]byte(chapterData), &chapter); err == nil {
+					mangaID = chapter.MangaID
+				}
+			}
+		}
+
+		if mangaID > 0 {
+			if err := h.Analytics.RecordPageView(r.Context(), id, page.ChapterID, mangaID); err != nil {
+				h.Logger.Error("Ошибка записи просмотра страницы", "err", err, "page_id", id)
+			}
+		} else {
+			h.Logger.Error("Не удалось получить manga_id для записи просмотра страницы", "page_id", id, "chapter_id", page.ChapterID)
+		}
 	}
 
 	contentType := "image/jpeg"
