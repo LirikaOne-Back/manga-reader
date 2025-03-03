@@ -26,7 +26,7 @@ type MangaHandler struct {
 func (h *MangaHandler) List(w http.ResponseWriter, r *http.Request) error {
 	cacheKey := "manga:list"
 	cachedDate, err := h.Cache.Get(r.Context(), cacheKey)
-	if err != nil && cachedDate != "" {
+	if err == nil && cachedDate != "" {
 		h.Logger.Info("Cache hit", "key", cacheKey)
 
 		var mangas []*models.Manga
