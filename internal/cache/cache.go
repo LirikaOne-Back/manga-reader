@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"github.com/go-redis/redis/v8"
 	"time"
 )
 
@@ -32,4 +33,5 @@ type Cache interface {
 	ZIncrBy(ctx context.Context, key string, increment float64, member string) (float64, error)
 	ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error)
 	ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) (map[string]float64, error)
+	GetClient() *redis.Client
 }

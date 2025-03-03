@@ -96,3 +96,7 @@ func (c *RedisCache) ZRevRangeWithScores(ctx context.Context, key string, start 
 
 	return scoreMap, nil
 }
+
+func (c *RedisCache) GetClient() *redis.Client {
+	return c.client
+}

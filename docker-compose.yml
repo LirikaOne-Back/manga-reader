@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: manga-reader-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - manga-data:/app/data
+      - manga-uploads:/app/uploads
+    environment:
+      - SERVER_ADDRESS=:8080
+      - DB_TYPE=postgres
+      - PG_HOST=postgres
+      - PG_PORT=5432
+      - PG_USER=lirika
+      - PG_PASSWORD=evil_god
+      - PG_DBNAME=manga_reader_app
+      - PG_SSLMODE=disable
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=1
+      - JWT_SECRET=evil_god2
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - manga-network
+
+  postgres:
+    image: postgres:15-alpine 
+    container_name: manga-reader-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=lirika
+      - POSTGRES_PASSWORD=evil_god
+      - POSTGRES_DB=manga_reader_app
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - manga-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lirika -d manga_reader_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6-alpine
+    container_name: manga-reader-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - manga-network
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.redis-admin
+    container_name: manga-reader-redis-admin
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=1
+    networks:
+      - manga-network
+
+volumes:
+  manga-data:
+  manga-uploads:
+  postgres-data:
+  redis-data:
+
+networks:
+  manga-network:
+    driver: bridge

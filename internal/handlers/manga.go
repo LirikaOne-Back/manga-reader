@@ -43,10 +43,14 @@ func (h *MangaHandler) List(w http.ResponseWriter, r *http.Request) error {
 		return apperror.NewDatabaseError("Ошибка получения списка манги", err)
 	}
 
-	jsonDate, err := json.Marshal(mangas)
-	if err != nil {
-		if err = h.Cache.Set(r.Context(), cacheKey, string(jsonDate), 5*time.Minute); err != nil {
-			h.Logger.Error("Ошибка записи в кеш", "err", err)
+	if h.Cache != nil {
+		jsonDate, err := json.Marshal(mangas)
+		if err == nil {
+			if err = h.Cache.Set(r.Context(), cacheKey, string(jsonDate), 5*time.Minute); err != nil {
+				h.Logger.Error("Ошибка записи в кеш", "err", err)
+			}
+		} else {
+			h.Logger.Error("Ошибка сериализации для кеша", "err", err)
 		}
 	}
 
@@ -84,45 +88,33 @@ func (h *MangaHandler) Detail(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	key := fmt.Sprintf("manga:%d", id)
+	var manga *models.Manga
+
 	if h.Cache != nil {
 		cached, err := h.Cache.Get(r.Context(), key)
 		if err == nil && cached != "" {
 			h.Logger.Info("Cache hit", "id", id)
 
-			var manga models.Manga
 			if err = json.Unmarshal([]byte(cached), &manga); err != nil {
 				h.Logger.Error("Ошибка десериализации из кэша", "err", err)
-			} else {
-				if h.Analytics != nil {
-					views, err := h.Analytics.GetMangaView(r.Context(), id)
-					if err != nil {
-						mangaWithViews := analytics.MangaWithViews{
-							ID:          manga.ID,
-							Title:       manga.Title,
-							Description: manga.Description,
-							Views:       views,
-						}
-						response.Success(w, http.StatusOK, mangaWithViews)
-						return nil
-					}
-				}
-				response.Success(w, http.StatusOK, manga)
-				return nil
 			}
+		} else {
+			h.Logger.Info("Cache miss", "id", id)
 		}
-		h.Logger.Info("Cache miss", "id", id)
 	}
 
-	m, err := h.Repo.GetByID(id)
-	if err != nil {
-		return apperror.NewNotFoundError("Манга не найдена", err)
-	}
+	if manga == nil {
+		manga, err = h.Repo.GetByID(id)
+		if err != nil {
+			return apperror.NewNotFoundError("Манга не найдена", err)
+		}
 
-	if h.Cache != nil {
-		jsonData, err := json.Marshal(m)
-		if err == nil {
-			if err = h.Cache.Set(r.Context(), key, string(jsonData), 5*time.Minute); err != nil {
-				h.Logger.Error("Ошибка записи в кэш", "err", err)
+		if h.Cache != nil {
+			jsonData, err := json.Marshal(manga)
+			if err == nil {
+				if err = h.Cache.Set(r.Context(), key, string(jsonData), 5*time.Minute); err != nil {
+					h.Logger.Error("Ошибка записи в кэш", "err", err)
+				}
 			}
 		}
 	}
@@ -140,9 +132,9 @@ func (h *MangaHandler) Detail(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	mangaWithViews := analytics.MangaWithViews{
-		ID:          m.ID,
-		Title:       m.Title,
-		Description: m.Description,
+		ID:          manga.ID,
+		Title:       manga.Title,
+		Description: manga.Description,
 		Views:       views,
 	}
 

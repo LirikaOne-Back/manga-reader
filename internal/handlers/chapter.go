@@ -128,58 +128,43 @@ func (h *ChapterHandler) GetById(w http.ResponseWriter, r *http.Request) error {
 		return apperror.NewBadRequestError("Некорректный ID главы", err)
 	}
 
+	var ch *models.Chapter
+	var mangaID int64
+
 	cacheKey := fmt.Sprintf("chapter:%d", id)
 	if h.Cache != nil {
 		cachedData, err := h.Cache.Get(r.Context(), cacheKey)
 		if err == nil && cachedData != "" {
 			h.Logger.Info("Cache hit for chapter", "id", id)
 
-			var chapter models.Chapter
-			if err = json.Unmarshal([]byte(cachedData), &chapter); err != nil {
-				h.Logger.Error("Ошибка десериализации главы из кеша", "err", err)
+			if err = json.Unmarshal([]byte(cachedData), &ch); err == nil {
+				mangaID = ch.MangaID
 			} else {
-				if h.Analytics != nil {
-					chapterViewsKey := fmt.Sprintf("views:chapter:%d", id)
-					viewsStr, err := h.Cache.Get(r.Context(), chapterViewsKey)
-					if err == nil {
-						views, _ := strconv.ParseInt(viewsStr, 10, 64)
-
-						chapterWithViews := analytics.ChapterWithViews{
-							ID:      chapter.ID,
-							MangaID: chapter.MangaID,
-							Number:  chapter.Number,
-							Title:   chapter.Title,
-							Views:   views,
-						}
-
-						response.Success(w, http.StatusOK, chapterWithViews)
-						return nil
-					}
-				}
-
-				response.Success(w, http.StatusOK, chapter)
-				return nil
+				h.Logger.Error("Ошибка десериализации главы из кеша", "err", err)
 			}
 		}
 	}
 
-	ch, err := h.Repo.GetByID(id)
-	if err != nil {
-		return apperror.NewNotFoundError("Глава не найдена", err)
-	}
+	if ch == nil {
+		ch, err = h.Repo.GetByID(id)
+		if err != nil {
+			return apperror.NewNotFoundError("Глава не найдена", err)
+		}
+		mangaID = ch.MangaID
 
-	if h.Cache != nil {
-		jsonData, err := json.Marshal(ch)
-		if err == nil {
-			if err = h.Cache.Set(r.Context(), cacheKey, string(jsonData), 0); err != nil {
-				h.Logger.Error("Ошибка кеширования главы", "err", err)
+		if h.Cache != nil {
+			jsonData, err := json.Marshal(ch)
+			if err == nil {
+				if err = h.Cache.Set(r.Context(), cacheKey, string(jsonData), 30*time.Minute); err != nil {
+					h.Logger.Error("Ошибка кеширования главы", "err", err)
+				}
 			}
 		}
 	}
 
 	var views int64 = 0
 	if h.Analytics != nil {
-		if err = h.Analytics.RecordChapterView(r.Context(), id, ch.MangaID); err != nil {
+		if err = h.Analytics.RecordChapterView(r.Context(), id, mangaID); err != nil {
 			h.Logger.Error("Ошибка записи просмотра главы", "err", err, "chapter_id", id)
 		}
 

@@ -204,10 +204,11 @@ func (h *PageHandler) ServeImage(w http.ResponseWriter, r *http.Request) error {
 
 	if h.Analytics != nil {
 		var mangaID int64 = 0
-		chapterCacheKey := fmt.Sprintf("chapter:%d", page.ChapterID)
 
 		if h.Cache != nil {
+			chapterCacheKey := fmt.Sprintf("chapter:%d", page.ChapterID)
 			chapterData, err := h.Cache.Get(r.Context(), chapterCacheKey)
+
 			if err == nil && chapterData != "" {
 				var chapter models.Chapter
 
@@ -217,12 +218,15 @@ func (h *PageHandler) ServeImage(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		if mangaID == 0 {
+			// Нужно сделать черех БД получение
+			h.Logger.Error("Не удалось получить manga_id для записи просмотра страницы", "page_id", id, "chapter_id", page.ChapterID)
+		}
+
 		if mangaID > 0 {
 			if err := h.Analytics.RecordPageView(r.Context(), id, page.ChapterID, mangaID); err != nil {
 				h.Logger.Error("Ошибка записи просмотра страницы", "err", err, "page_id", id)
 			}
-		} else {
-			h.Logger.Error("Не удалось получить manga_id для записи просмотра страницы", "page_id", id, "chapter_id", page.ChapterID)
 		}
 	}
 

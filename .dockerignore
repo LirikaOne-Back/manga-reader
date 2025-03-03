@@ -1,0 +1,34 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+Dockerfile.redis-admin
+docker-compose.yml
+.dockerignore
+
+# IDE
+.idea
+.vscode
+
+# Бинарные файлы и временные данные
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.db
+*.db-journal
+*.log
+*.test
+*.out
+tmp/
+
+# Загружаемые файлы (они будут монтироваться как volume)
+uploads/
+
+# Другие файлы
+README.md
+LICENSE
+.env

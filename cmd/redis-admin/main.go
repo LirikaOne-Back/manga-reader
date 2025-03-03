@@ -85,7 +85,33 @@ func main() {
 }
 
 func listKeys(ctx context.Context, c *cache.RedisCache, pattern string) {
-	// пока не доступно
+	client := c.GetClient()
+	if client == nil {
+		log.Fatalf("Не удалось получить клиент Redis")
+		return
+	}
+
+	var cursor uint64
+	var keys []string
+	var err error
+
+	fmt.Printf("Ключи по шаблону %q:\n", pattern)
+
+	for {
+		keys, cursor, err = client.Scan(ctx, cursor, pattern, 10).Result()
+		if err != nil {
+			log.Fatalf("Ошибка при сканировании ключей: %v", err)
+			return
+		}
+
+		for _, key := range keys {
+			fmt.Println(key)
+		}
+
+		if cursor == 0 {
+			break
+		}
+	}
 }
 
 func getValue(ctx context.Context, c *cache.RedisCache, key string) {
@@ -107,7 +133,19 @@ func removeKey(ctx context.Context, c *cache.RedisCache, key string) {
 }
 
 func flushAll(ctx context.Context, c *cache.RedisCache) {
-	// пока не доступно
+	client := c.GetClient()
+	if client == nil {
+		log.Fatalf("Не удалось получить клиент Redis")
+		return
+	}
+
+	_, err := client.FlushAll(ctx).Result()
+	if err != nil {
+		log.Fatalf("Ошибка при очистке Redis: %v", err)
+		return
+	}
+
+	fmt.Println("Redis успешно очищен")
 }
 
 func getZRange(ctx context.Context, c *cache.RedisCache, key string, start, stop int64) {

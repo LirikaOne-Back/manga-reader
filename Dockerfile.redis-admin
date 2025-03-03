@@ -1,0 +1,29 @@
+FROM golang:1.23-alpine AS builder
+
+RUN apk add --no-cache git gcc musl-dev
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o redis-admin ./cmd/redis-admin/main.go
+
+FROM alpine:latest
+
+RUN apk add --no-cache ca-certificates tzdata
+
+RUN adduser -D -u 1000 appuser
+
+WORKDIR /app
+
+COPY --from=builder /app/redis-admin /app/
+
+RUN chmod +x /app/redis-admin
+
+USER appuser
+
+CMD ["tail", "-f", "/dev/null"]

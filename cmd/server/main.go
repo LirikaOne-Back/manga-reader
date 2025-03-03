@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/golang-migrate/migrate/v4"
 	"manga-reader/internal/analytics"
 	"manga-reader/internal/auth"
 	"manga-reader/internal/db/postgres"
@@ -12,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"manga-reader/config"
 	"manga-reader/internal/cache"
 	"manga-reader/internal/db"
@@ -24,6 +27,56 @@ import (
 func main() {
 	cfg := config.LoadConfig()
 	log := logger.NewLogger()
+
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		if len(os.Args) > 2 && os.Args[2] == "up" {
+			log.Info("Запуск миграций вверх...")
+			if cfg.DBType != "postgres" {
+				log.Error("Миграции поддерживаются только для PostgreSQL")
+				return
+			}
+
+			migrateConnString := cfg.PostgresMigrationURL()
+			log.Info("Подключение к БД для миграций", "url", migrateConnString)
+
+			m, err := migrate.New("file://migrations/postgres", migrateConnString)
+			if err != nil {
+				log.Error("Ошибка инициализации миграций", "err", err)
+				return
+			}
+
+			if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+				log.Error("Ошибка применения миграций", "err", err)
+				return
+			}
+
+			log.Info("Миграции успешно применены")
+			return
+		} else if len(os.Args) > 2 && os.Args[2] == "down" {
+			log.Info("Запуск миграций вниз...")
+			if cfg.DBType != "postgres" {
+				log.Error("Миграции поддерживаются только для PostgreSQL")
+				return
+			}
+
+			migrateConnString := cfg.PostgresMigrationURL()
+			log.Info("Подключение к БД для миграций", "url", migrateConnString)
+
+			m, err := migrate.New("file://migrations/postgres", migrateConnString)
+			if err != nil {
+				log.Error("Ошибка инициализации миграций", "err", err)
+				return
+			}
+
+			if err := m.Down(); err != nil && err != migrate.ErrNoChange {
+				log.Error("Ошибка применения миграций", "err", err)
+				return
+			}
+
+			log.Info("Миграции успешно применены")
+			return
+		}
+	}
 
 	auth.SetJWTSecret(cfg.JWTSecret)
 

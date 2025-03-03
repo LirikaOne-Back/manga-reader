@@ -14,7 +14,7 @@ func RegisterUserRoutes(mux *http.ServeMux, uh *UserHandler) {
 		return uh.Register(w, r)
 	}))
 	mux.HandleFunc("/user/login", middleware.ErrorHandler(uh.Logger, func(w http.ResponseWriter, r *http.Request) error {
-		if r.Method != http.MethodGet {
+		if r.Method != http.MethodPost {
 			return apperror.NewBadRequestError("Метод не поддерживается", nil)
 		}
 		return uh.Login(w, r)

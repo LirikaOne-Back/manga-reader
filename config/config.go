@@ -27,11 +27,22 @@ type Config struct {
 func LoadConfig() Config {
 	_ = godotenv.Load()
 
+	inDocker := false
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		inDocker = true
+	}
+
+	pgHost := getEnv("PG_HOST", "localhost")
+
+	if inDocker && pgHost == "localhost" {
+		pgHost = "postgres"
+	}
+
 	return Config{
 		ServerAddress: getEnv("SERVER_ADDRESS", ":8080"),
 		DBType:        getEnv("DB_TYPE", "sqlite"),
 		DBSource:      getEnv("DB_SOURCE", "manga.db"),
-		PgHost:        getEnv("PG_HOST", "localhost"),
+		PgHost:        pgHost,
 		PgPort:        getEnvAsInt("PG_PORT", 5432),
 		PgUser:        getEnv("PG_USER", "postgres"),
 		PgPassword:    getEnv("PG_PASSWORD", ""),
@@ -64,4 +75,9 @@ func getEnvAsInt(key string, defaultValue int) int {
 	}
 	return defaultValue
 
+}
+
+func (c *Config) PostgresMigrationURL() string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		c.PgUser, c.PgPassword, c.PgHost, c.PgPort, c.PgDBName, c.PgSSLMode)
 }
